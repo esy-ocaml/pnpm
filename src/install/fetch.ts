@@ -177,15 +177,23 @@ type FetchToStoreOptions = {
  */
 function fetchToStoreCached (opts: FetchToStoreOptions): Promise<void> {
   return memoize(opts.fetchLocks, opts.resolution.id, async function () {
-    if (!opts.force && await exists(opts.target)) return
+    // We fetch into targetStage directory first and then fs.rename() it to the
+    // target directory.
+    const target = opts.target
+    const targetStage = `${opts.target}-stage`
 
-    await rimraf(opts.target)
+    if (!opts.force && await exists(target)) return
+
+    await rimraf(targetStage)
 
     opts.log('download-queued')
-    await fetchRes(opts.resolution, opts.target, {got: opts.got, log: opts.log})
+    await fetchRes(opts.resolution, targetStage, {got: opts.got, log: opts.log})
 
-    const pkg = await requireJson(path.join(opts.target, 'package.json'))
-
+    const pkg = await requireJson(path.join(targetStage, 'package.json'))
     opts.log('package.json', pkg)
+
+    // fs.rename(oldPath, newPath) is an atomic operation, so we do it at the
+    // end
+    await fs.rename(targetStage, target)
   })
 }
